@@ -26,7 +26,7 @@ func UserConfigDir() (string, error) {
 
 // LoadEnv loads any ".env" (override by setting DOT_ENV) in the current path
 // and "[user config dir]/[app]/config.env" if they exist.
-
+//
 // This will not override any variables that are set, and the .env file takes
 // precedence over config.env.
 func LoadEnv(app string) error {
