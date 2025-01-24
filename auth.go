@@ -338,6 +338,9 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 		token.Scopes = scopes
 		token.GrantedScopes = strings.Split(respData.Scope, " ")
 
+		w.Header().Set("Content-Type", "text/plain")
+		w.Write([]byte("You are now logged in and can close this window."))
+
 		return nil
 	})
 
@@ -386,7 +389,9 @@ func handlerFunc(
 	return func(w http.ResponseWriter, r *http.Request) {
 		err := fn(w, r)
 		if err != nil {
+			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusBadRequest)
+
 			_, _ = w.Write([]byte(err.Error()))
 		}
 
