@@ -259,9 +259,7 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 
 	_ = browser.OpenURL(authURL.String())
 
-	server := http.Server{
-		Addr: "127.0.0.1:4000",
-	}
+	var server http.Server
 
 	var (
 		token       AccessToken
