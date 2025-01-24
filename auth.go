@@ -58,20 +58,14 @@ var defaultEnvs = map[string]string{
 // configuration, and clientID must match what has been set up in our OIDC
 // provider.
 func NewConfigurationHandler[T any](name string, clientID string) (*ConfigurationHandler[T], error) {
-	// Give preference to XDG_CONFIG_HOME.
-	ucDir := os.Getenv("XDG_CONFIG_HOME")
-	if ucDir == "" {
-		d, err := os.UserConfigDir()
-		if err != nil {
-			return nil, fmt.Errorf("get user configuration directory: %w", err)
-		}
-
-		ucDir = d
+	ucDir, err := UserConfigDir()
+	if err != nil {
+		return nil, fmt.Errorf("get user configuration directory: %w", err)
 	}
 
 	configDir := filepath.Join(ucDir, name)
 
-	err := os.MkdirAll(configDir, 0o700)
+	err = os.MkdirAll(configDir, 0o700)
 	if err != nil {
 		return nil, fmt.Errorf("ensure application configuration directory: %w", err)
 	}
