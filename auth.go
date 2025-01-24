@@ -339,7 +339,7 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 		token.GrantedScopes = strings.Split(respData.Scope, " ")
 
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write([]byte("You are now logged in and can close this window."))
+		_, _ = w.Write([]byte("You are now logged in and can close this window."))
 
 		return nil
 	})
