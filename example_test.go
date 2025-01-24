@@ -20,7 +20,9 @@ func Example() {
 
 	println("Sample application that demonstrates logging in to elephant from a CLI tool\n")
 
-	app, err := clitools.NewConfigurationHandler[SampleConf]("clitools", "elephant-cli")
+	app, err := clitools.NewConfigurationHandler[SampleConf](
+		"clitools", clitools.DefaultApplicationID,
+	)
 	if err != nil {
 		panic(fmt.Errorf("create configuration handler: %w", err))
 	}
