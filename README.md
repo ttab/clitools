@@ -1,5 +1,7 @@
 # CLI tools
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/ttab/clitools.svg)](https://pkg.go.dev/github.com/ttab/clitools)
+
 The clitools contains helpers for building TT CLI tools. Current functionality includes configuration handling and authenticating against our OIDC provider.
 
 ## Logging in using the ConfigurationHandler
