@@ -29,6 +29,13 @@ const (
 	ProdOIDCConfigURL  = "https://login.tt.se/realms/elephant/.well-known/openid-configuration"
 )
 
+type AccessToken struct {
+	Token         string    `json:"token"`
+	Expires       time.Time `json:"expires"`
+	Scopes        []string  `json:"scopes"`
+	GrantedScopes []string  `json:"granted_scopes"`
+}
+
 var defaultEnvs = map[string]string{
 	EnvLocal: StageOIDCConfigURL,
 	EnvStage: StageOIDCConfigURL,
@@ -53,6 +60,7 @@ func NewConfigurationHandler[T any](name string, clientID string) (*Configuratio
 		clientID:        clientID,
 		configDirectory: configDir,
 		configFile:      filepath.Join(configDir, "config.json"),
+		tokenFile:       filepath.Join(configDir, "tokens.json"),
 	}
 
 	err = unmarshalFile(ac.configFile, &ac.config)
@@ -60,12 +68,17 @@ func NewConfigurationHandler[T any](name string, clientID string) (*Configuratio
 		return nil, fmt.Errorf("load current configuration: %w", err)
 	}
 
+	err = unmarshalFile(ac.tokenFile, &ac.tokens)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("load current access tokens: %w", err)
+	}
+
 	if ac.config.Environments == nil {
 		ac.config.Environments = make(map[string]*configuredEnvironment)
 	}
 
-	if ac.config.Tokens == nil {
-		ac.config.Tokens = make(map[string]AccessToken)
+	if ac.tokens == nil {
+		ac.tokens = make(map[string]AccessToken)
 	}
 
 	for name, confURL := range defaultEnvs {
@@ -87,7 +100,9 @@ type ConfigurationHandler[T any] struct {
 	clientID        string
 	configDirectory string
 	configFile      string
+	tokenFile       string
 	config          appConfiguration[T]
+	tokens          map[string]AccessToken
 }
 
 func (ac *ConfigurationHandler[T]) RegisterEnvironment(
@@ -110,7 +125,17 @@ func (ac *ConfigurationHandler[T]) RegisterEnvironment(
 }
 
 func (ac *ConfigurationHandler[T]) Save() error {
-	return marshalFile(ac.configFile, ac.config)
+	err := marshalFile(ac.configFile, ac.config)
+	if err != nil {
+		return fmt.Errorf("save configuration: %w", err)
+	}
+
+	err = marshalFile(ac.tokenFile, ac.tokens)
+	if err != nil {
+		return fmt.Errorf("save tokens: %w", err)
+	}
+
+	return nil
 }
 
 func (ac *ConfigurationHandler[T]) GetConfiguration() T {
@@ -124,7 +149,7 @@ func (ac *ConfigurationHandler[T]) SetConfiguration(conf T) {
 func (ac *ConfigurationHandler[T]) GetAccessToken(
 	ctx context.Context, environment string, scopes []string,
 ) (_ AccessToken, outErr error) {
-	currentToken, ok := ac.config.Tokens[environment]
+	currentToken, ok := ac.tokens[environment]
 	if ok && time.Until(currentToken.Expires) > 5*time.Minute && slices.Equal(currentToken.Scopes, scopes) {
 		return currentToken, nil
 	}
@@ -250,7 +275,7 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 
 		var respData grantResponse
 
-		err = unmarshalReader(res.Body, &respData, false)
+		err = unmarshalReader(res.Body, &respData)
 		if err != nil {
 			return fmt.Errorf("parse grant response: %w", err)
 		}
@@ -283,7 +308,7 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 		return _z, callbackErr
 	}
 
-	ac.config.Tokens[environment] = token
+	ac.tokens[environment] = token
 
 	return token, nil
 }
@@ -335,7 +360,7 @@ func unmarshalFile(name string, o any) (outErr error) {
 
 	defer safeClose(f, "file", &outErr)
 
-	return unmarshalReader(f, o, true)
+	return unmarshalReader(f, o)
 }
 
 func safeClose(c io.Closer, name string, outErr *error) {
@@ -346,12 +371,8 @@ func safeClose(c io.Closer, name string, outErr *error) {
 	}
 }
 
-func unmarshalReader(r io.Reader, o any, disallowUnknown bool) (outErr error) {
+func unmarshalReader(r io.Reader, o any) (outErr error) {
 	dec := json.NewDecoder(r)
-
-	if disallowUnknown {
-		dec.DisallowUnknownFields()
-	}
 
 	err := dec.Decode(o)
 	if err != nil {

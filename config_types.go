@@ -2,6 +2,7 @@ package clitools
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,20 +11,23 @@ import (
 type appConfiguration[T any] struct {
 	Environments  map[string]*configuredEnvironment `json:"environments"`
 	Configuration T                                 `json:"configuration"`
-	Tokens        map[string]AccessToken            `json:"tokens"`
 }
 
 type configuredEnvironment struct {
-	Refreshed     time.Time   `json:"refreshed"`
-	OIDCConfigURL string      `json:"oidc_config_url"`
+	Refreshed     time.Time   `json:"refreshed,omitempty,omitzero"`
+	OIDCConfigURL string      `json:"oidc_config_url,omitempty"`
 	OIDCConfig    *oidcConfig `json:"oidc_config"`
 }
 
 func (ce *configuredEnvironment) EnsureOIDCConfig(
 	ctx context.Context, client *http.Client, maxAge time.Duration,
 ) (outErr error) {
-	if ce.OIDCConfig != nil && time.Since(ce.Refreshed) < maxAge {
+	if ce.OIDCConfig != nil && (ce.OIDCConfigURL == "" || time.Since(ce.Refreshed) < maxAge) {
 		return nil
+	}
+
+	if ce.OIDCConfigURL == "" {
+		return errors.New("no OIDC config or URL has been set")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, ce.OIDCConfigURL, nil)
@@ -44,7 +48,7 @@ func (ce *configuredEnvironment) EnsureOIDCConfig(
 
 	var conf oidcConfig
 
-	err = unmarshalReader(res.Body, &conf, false)
+	err = unmarshalReader(res.Body, &conf)
 	if err != nil {
 		return fmt.Errorf("parse OIDC config: %w", err)
 	}
@@ -62,11 +66,4 @@ type oidcConfig struct {
 	IntrospectionEndpoint string `json:"introspection_endpoint"`
 	UserinfoEndpoint      string `json:"userinfo_endpoint"`
 	EndSessionEndpoint    string `json:"end_session_endpoint"`
-}
-
-type AccessToken struct {
-	Token         string    `json:"token"`
-	Expires       time.Time `json:"expires"`
-	Scopes        []string  `json:"scopes"`
-	GrantedScopes []string  `json:"granted_scopes"`
 }
