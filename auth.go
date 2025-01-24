@@ -21,14 +21,24 @@ import (
 	"github.com/pkg/browser"
 )
 
+// DefaultApplicationID when authorising CLI applications.
+const DefaultApplicationID = "elephant-cli"
+
+// Default environments. EnvLocal will by default be mapped to the stage OIDC
+// configuration endpoint.
 const (
-	EnvLocal           = "local"
-	EnvStage           = "stage"
-	EnvProd            = "prod"
+	EnvLocal = "local"
+	EnvStage = "stage"
+	EnvProd  = "prod"
+)
+
+// Standard OIDC configurations endpoints at TT.
+const (
 	StageOIDCConfigURL = "https://login.stage.tt.se/realms/elephant/.well-known/openid-configuration"
 	ProdOIDCConfigURL  = "https://login.tt.se/realms/elephant/.well-known/openid-configuration"
 )
 
+// AccessToken that can be used to communicate with our APIs.
 type AccessToken struct {
 	Token         string    `json:"token"`
 	Expires       time.Time `json:"expires"`
@@ -42,15 +52,26 @@ var defaultEnvs = map[string]string{
 	EnvProd:  ProdOIDCConfigURL,
 }
 
+// NewConfigurationHandler crates a configuration handler using the application
+// specific configuration T, and loads the current configuration from disk if
+// it's available. Name is used as the directory name for the stored
+// configuration, and clientID must match what has been set up in our OIDC
+// provider.
 func NewConfigurationHandler[T any](name string, clientID string) (*ConfigurationHandler[T], error) {
-	ucDir, err := os.UserConfigDir()
-	if err != nil {
-		return nil, fmt.Errorf("get user configuration directory: %w", err)
+	// Give preference to XDG_CONFIG_HOME.
+	ucDir := os.Getenv("XDG_CONFIG_HOME")
+	if ucDir == "" {
+		d, err := os.UserConfigDir()
+		if err != nil {
+			return nil, fmt.Errorf("get user configuration directory: %w", err)
+		}
+
+		ucDir = d
 	}
 
 	configDir := filepath.Join(ucDir, name)
 
-	err = os.MkdirAll(configDir, 0o700)
+	err := os.MkdirAll(configDir, 0o700)
 	if err != nil {
 		return nil, fmt.Errorf("ensure application configuration directory: %w", err)
 	}
@@ -63,22 +84,9 @@ func NewConfigurationHandler[T any](name string, clientID string) (*Configuratio
 		tokenFile:       filepath.Join(configDir, "tokens.json"),
 	}
 
-	err = unmarshalFile(ac.configFile, &ac.config)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("load current configuration: %w", err)
-	}
-
-	err = unmarshalFile(ac.tokenFile, &ac.tokens)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("load current access tokens: %w", err)
-	}
-
-	if ac.config.Environments == nil {
-		ac.config.Environments = make(map[string]*configuredEnvironment)
-	}
-
-	if ac.tokens == nil {
-		ac.tokens = make(map[string]AccessToken)
+	err = ac.Load()
+	if err != nil {
+		return nil, err
 	}
 
 	for name, confURL := range defaultEnvs {
@@ -87,7 +95,7 @@ func NewConfigurationHandler[T any](name string, clientID string) (*Configuratio
 			continue
 		}
 
-		ac.config.Environments[name] = &configuredEnvironment{
+		ac.config.Environments[name] = &OIDCEnvironment{
 			OIDCConfigURL: confURL,
 		}
 	}
@@ -105,18 +113,18 @@ type ConfigurationHandler[T any] struct {
 	tokens          map[string]AccessToken
 }
 
+// RegisterEnvironment can be used to register a non-standard environment.
 func (ac *ConfigurationHandler[T]) RegisterEnvironment(
 	ctx context.Context,
-	name string, configURL string,
+	name string, conf OIDCEnvironment,
 ) error {
-	ce := ac.config.Environments[name]
+	ac.config.Environments[name] = &conf
 
-	if ce.OIDCConfigURL != configURL {
-		ce.OIDCConfigURL = configURL
-		ce.OIDCConfig = nil
+	if conf.OIDCConfigURL == "" {
+		return nil
 	}
 
-	err := ce.EnsureOIDCConfig(ctx, http.DefaultClient, 12*time.Hour)
+	err := conf.EnsureOIDCConfig(ctx, http.DefaultClient, 12*time.Hour)
 	if err != nil {
 		return err
 	}
@@ -124,6 +132,38 @@ func (ac *ConfigurationHandler[T]) RegisterEnvironment(
 	return nil
 }
 
+// Load configuration and tokens from disk.
+func (ac *ConfigurationHandler[T]) Load() error {
+	var (
+		config appConfiguration[T]
+		tokens map[string]AccessToken
+	)
+
+	err := unmarshalFile(ac.configFile, &config)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("load configuration: %w", err)
+	}
+
+	err = unmarshalFile(ac.tokenFile, &tokens)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("load access tokens: %w", err)
+	}
+
+	if config.Environments == nil {
+		config.Environments = make(map[string]*OIDCEnvironment)
+	}
+
+	if tokens == nil {
+		tokens = make(map[string]AccessToken)
+	}
+
+	ac.config = config
+	ac.tokens = tokens
+
+	return nil
+}
+
+// Save configuration and tokens to disk.
 func (ac *ConfigurationHandler[T]) Save() error {
 	err := marshalFile(ac.configFile, ac.config)
 	if err != nil {
@@ -138,14 +178,22 @@ func (ac *ConfigurationHandler[T]) Save() error {
 	return nil
 }
 
+// GetConfiguration returns the application-specific configuration.
 func (ac *ConfigurationHandler[T]) GetConfiguration() T {
 	return ac.config.Configuration
 }
 
+// GetConfiguration updates the application-specific configuration.
 func (ac *ConfigurationHandler[T]) SetConfiguration(conf T) {
 	ac.config.Configuration = conf
 }
 
+// GetAccessToken either returns an existing non-expired token for the
+// environment that matches the requested scope, or starts the authorization
+// flow to get a new token.
+//
+// During the authorisation flow we will attempt to automatically open a URL in
+// the users browser.
 func (ac *ConfigurationHandler[T]) GetAccessToken(
 	ctx context.Context, environment string, scopes []string,
 ) (_ AccessToken, outErr error) {
@@ -315,7 +363,7 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 
 func (ac *ConfigurationHandler[T]) getOIDCConfig(
 	ctx context.Context, environment string,
-) (*oidcConfig, error) {
+) (*OIDCConfig, error) {
 	ce, ok := ac.config.Environments[environment]
 	if !ok {
 		return nil, fmt.Errorf("unknown environment %q", environment)

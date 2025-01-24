@@ -9,17 +9,17 @@ import (
 )
 
 type appConfiguration[T any] struct {
-	Environments  map[string]*configuredEnvironment `json:"environments"`
-	Configuration T                                 `json:"configuration"`
+	Environments  map[string]*OIDCEnvironment `json:"environments"`
+	Configuration T                           `json:"configuration"`
 }
 
-type configuredEnvironment struct {
+type OIDCEnvironment struct {
 	Refreshed     time.Time   `json:"refreshed,omitempty,omitzero"`
 	OIDCConfigURL string      `json:"oidc_config_url,omitempty"`
-	OIDCConfig    *oidcConfig `json:"oidc_config"`
+	OIDCConfig    *OIDCConfig `json:"oidc_config"`
 }
 
-func (ce *configuredEnvironment) EnsureOIDCConfig(
+func (ce *OIDCEnvironment) EnsureOIDCConfig(
 	ctx context.Context, client *http.Client, maxAge time.Duration,
 ) (outErr error) {
 	if ce.OIDCConfig != nil && (ce.OIDCConfigURL == "" || time.Since(ce.Refreshed) < maxAge) {
@@ -46,7 +46,7 @@ func (ce *configuredEnvironment) EnsureOIDCConfig(
 		return fmt.Errorf("error response: %s", res.Status)
 	}
 
-	var conf oidcConfig
+	var conf OIDCConfig
 
 	err = unmarshalReader(res.Body, &conf)
 	if err != nil {
@@ -59,7 +59,7 @@ func (ce *configuredEnvironment) EnsureOIDCConfig(
 	return nil
 }
 
-type oidcConfig struct {
+type OIDCConfig struct {
 	Issuer                string `json:"issuer"`
 	AuthorizationEndpoint string `json:"authorization_endpoint"`
 	TokenEndpoint         string `json:"token_endpoint"`
