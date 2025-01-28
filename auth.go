@@ -192,7 +192,7 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 	ctx context.Context, environment string, scopes []string,
 ) (_ AccessToken, outErr error) {
 	currentToken, ok := ac.tokens[environment]
-	if ok && time.Until(currentToken.Expires) > 5*time.Minute && slices.Equal(currentToken.Scopes, scopes) {
+	if ok && time.Until(currentToken.Expires) > 5*time.Minute && subsetOf(scopes, currentToken.GrantedScopes) {
 		return currentToken, nil
 	}
 
@@ -354,6 +354,16 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 	ac.tokens[environment] = token
 
 	return token, nil
+}
+
+func subsetOf(a []string, b []string) bool {
+	for _, v := range a {
+		if !slices.Contains(b, v) {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (ac *ConfigurationHandler[T]) getOIDCConfig(
