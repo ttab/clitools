@@ -19,24 +19,29 @@ import (
 	"time"
 
 	"github.com/pkg/browser"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/clientcredentials"
 )
 
 // DefaultApplicationID when authorising CLI applications.
 const DefaultApplicationID = "elephant-cli"
 
-// Default environments. EnvLocal will by default be mapped to the stage OIDC
-// configuration endpoint.
-const (
-	EnvLocal = "local"
-	EnvStage = "stage"
-	EnvProd  = "prod"
-)
-
 // Standard OIDC configurations endpoints at TT.
 const (
-	StageOIDCConfigURL = "https://login.stage.tt.se/realms/elephant/.well-known/openid-configuration"
-	ProdOIDCConfigURL  = "https://login.tt.se/realms/elephant/.well-known/openid-configuration"
+	StageOIDCServer = "https://login.stage.tt.se"
+	ProdOIDCServer  = "https://login.tt.se"
 )
+
+func OIDCConfigURL(serverURL string, realm string) (string, error) {
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid server URL: %w", err)
+	}
+
+	u = u.JoinPath("realms", realm, ".well-known", "openid-configuration")
+
+	return u.String(), nil
+}
 
 // AccessToken that can be used to communicate with our APIs.
 type AccessToken struct {
@@ -46,18 +51,17 @@ type AccessToken struct {
 	GrantedScopes []string  `json:"granted_scopes"`
 }
 
-var defaultEnvs = map[string]string{
-	EnvLocal: StageOIDCConfigURL,
-	EnvStage: StageOIDCConfigURL,
-	EnvProd:  ProdOIDCConfigURL,
-}
-
 // NewConfigurationHandler crates a configuration handler using the application
 // specific configuration T, and loads the current configuration from disk if
 // it's available. Name is used as the directory name for the stored
 // configuration, and clientID must match what has been set up in our OIDC
 // provider.
-func NewConfigurationHandler[T any](name string, clientID string) (*ConfigurationHandler[T], error) {
+func NewConfigurationHandler[T any](
+	name string,
+	clientID string,
+	environment string,
+	oidcConfigURL string,
+) (*ConfigurationHandler[T], error) {
 	ucDir, err := UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("get user configuration directory: %w", err)
@@ -83,14 +87,12 @@ func NewConfigurationHandler[T any](name string, clientID string) (*Configuratio
 		return nil, err
 	}
 
-	for name, confURL := range defaultEnvs {
-		_, isSet := ac.config.Environments[name]
-		if isSet {
-			continue
-		}
+	oidcEnv, isSet := ac.config.Environments[environment]
+	if !isSet || oidcEnv.OIDCConfigURL != oidcConfigURL {
+		delete(ac.tokens, environment)
 
-		ac.config.Environments[name] = &OIDCEnvironment{
-			OIDCConfigURL: confURL,
+		ac.config.Environments[environment] = &OIDCEnvironment{
+			OIDCConfigURL: oidcConfigURL,
 		}
 	}
 
@@ -107,23 +109,19 @@ type ConfigurationHandler[T any] struct {
 	tokens          map[string]AccessToken
 }
 
-// RegisterEnvironment can be used to register a non-standard environment.
+// RegisterEnvironment can be used to register additional environments.
 func (ac *ConfigurationHandler[T]) RegisterEnvironment(
 	ctx context.Context,
-	name string, conf OIDCEnvironment,
-) error {
-	ac.config.Environments[name] = &conf
+	name string, configURL string,
+) {
+	oidcEnv, isSet := ac.config.Environments[name]
+	if !isSet || oidcEnv.OIDCConfigURL != configURL {
+		delete(ac.tokens, name)
 
-	if conf.OIDCConfigURL == "" {
-		return nil
+		ac.config.Environments[name] = &OIDCEnvironment{
+			OIDCConfigURL: configURL,
+		}
 	}
-
-	err := conf.EnsureOIDCConfig(ctx, http.DefaultClient, 12*time.Hour)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // Load configuration and tokens from disk.
@@ -182,6 +180,33 @@ func (ac *ConfigurationHandler[T]) SetConfiguration(conf T) {
 	ac.config.Configuration = conf
 }
 
+// Convenience function for using the OIDC configuration to get a client
+// credentials token source.
+func (ac *ConfigurationHandler[T]) GetClientAccessToken(
+	ctx context.Context, environment string,
+	clientID string, clientSecret string,
+	scopes []string,
+) (oauth2.TokenSource, error) {
+	oidc, ok := ac.config.Environments[environment]
+	if !ok {
+		return nil, fmt.Errorf("unknown environment %q", environment)
+	}
+
+	err := oidc.EnsureOIDCConfig(ctx, http.DefaultClient, 24*time.Hour)
+	if err != nil {
+		return nil, fmt.Errorf("ensure OIDC config: %w", err)
+	}
+
+	conf := clientcredentials.Config{
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
+		TokenURL:     oidc.OIDCConfig.TokenEndpoint,
+		Scopes:       scopes,
+	}
+
+	return conf.TokenSource(ctx), nil
+}
+
 // GetAccessToken either returns an existing non-expired token for the
 // environment that matches the requested scope, or starts the authorization
 // flow to get a new token.
@@ -198,7 +223,7 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 
 	var _z AccessToken
 
-	oc, err := ac.getOIDCConfig(ctx, environment)
+	oc, err := ac.GetOIDCConfig(ctx, environment)
 	if err != nil {
 		return _z, fmt.Errorf(
 			"get %q OIDC config: %w", environment, err)
@@ -270,7 +295,7 @@ func (ac *ConfigurationHandler[T]) GetAccessToken(
 		// Close when we're done, but spin out, as close waits for
 		// handlers to finish.
 		defer func() {
-			go server.Close()
+			go server.Close() //nolint: errcheck
 		}()
 
 		q := r.URL.Query()
@@ -366,7 +391,7 @@ func subsetOf(a []string, b []string) bool {
 	return true
 }
 
-func (ac *ConfigurationHandler[T]) getOIDCConfig(
+func (ac *ConfigurationHandler[T]) GetOIDCConfig(
 	ctx context.Context, environment string,
 ) (*OIDCConfig, error) {
 	ce, ok := ac.config.Environments[environment]

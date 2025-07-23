@@ -16,12 +16,18 @@ func Example() {
 		SomeSetting string `json:"some_setting"`
 	}
 
-	env := clitools.EnvStage
+	env := "stage"
+
+	oidcURL, err := clitools.OIDCConfigURL(clitools.StageOIDCServer, "elephant")
+	if err != nil {
+		panic(fmt.Errorf("get realm OIDC config URL: %w", err))
+	}
 
 	println("Sample application that demonstrates logging in to elephant from a CLI tool\n")
 
 	app, err := clitools.NewConfigurationHandler[SampleConf](
 		"clitools", clitools.DefaultApplicationID,
+		env, oidcURL,
 	)
 	if err != nil {
 		panic(fmt.Errorf("create configuration handler: %w", err))
