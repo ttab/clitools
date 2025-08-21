@@ -20,12 +20,17 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 				Name:  "endpoint",
 				Usage: "-endpoint=repository=https://repository.api.demo.ecms.test",
 			},
+			&cli.StringFlag{
+				Name:  "standard-endpoints",
+				Usage: "Set standard endpoints with base domain -standard-endpoints=demo.ecms.test",
+			},
 		},
 		Action: func(c *cli.Context) error {
 			var (
 				env       = c.String("env")
 				oidc      = c.String("oidc")
 				endpoints = c.StringSlice("endpoint")
+				standard  = c.String("standard-endpoints")
 			)
 
 			if env == "" {
@@ -58,6 +63,11 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 			}
 
 			handler.AddEndpoints(endpointMap)
+
+			if standard != "" {
+				handler.AddEndpoints(
+					elephantEndpoints("https", standard))
+			}
 
 			err = handler.Save()
 			if err != nil {
