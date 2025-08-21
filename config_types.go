@@ -122,7 +122,7 @@ var known = map[string]knownEnv{
 func elephantEndpoints(proto string, base string) map[string]string {
 	return map[string]string{
 		"chrome":     fmt.Sprintf("%s://%s/elephant", proto, base),
-		"repository": ElephantAPIEndpoint(proto, base, "respository"),
+		"repository": ElephantAPIEndpoint(proto, base, "repository"),
 		"index":      ElephantAPIEndpoint(proto, base, "index"),
 		"spell":      ElephantAPIEndpoint(proto, base, "spell"),
 		"user":       ElephantAPIEndpoint(proto, base, "user"),

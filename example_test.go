@@ -11,38 +11,23 @@ import (
 )
 
 func Example() {
-	// SampleConf - any addional configuration you want to store.
-	type SampleConf struct {
-		SomeSetting string `json:"some_setting"`
-	}
-
 	env := "stage"
-
-	oidcURL, err := clitools.OIDCConfigURL(clitools.StageOIDCServer, "elephant")
-	if err != nil {
-		panic(fmt.Errorf("get realm OIDC config URL: %w", err))
-	}
 
 	println("Sample application that demonstrates logging in to elephant from a CLI tool\n")
 
-	app, err := clitools.NewConfigurationHandler[SampleConf](
-		"clitools", clitools.DefaultApplicationID,
-		env, oidcURL,
+	app, err := clitools.NewConfigurationHandler(
+		"clitools", clitools.DefaultApplicationID, env,
 	)
 	if err != nil {
 		panic(fmt.Errorf("create configuration handler: %w", err))
 	}
 
-	token, err := app.GetAccessToken(context.Background(), env, []string{
+	token, err := app.GetAccessToken(context.Background(), []string{
 		"doc_read",
 	})
 	if err != nil {
 		panic(fmt.Errorf("authenticate: %w", err))
 	}
-
-	app.SetConfiguration(SampleConf{
-		SomeSetting: "that we want to track",
-	})
 
 	err = app.Save()
 	if err != nil {
