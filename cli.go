@@ -1,11 +1,12 @@
 package clitools
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 )
 
 func ConfigureCliCommands(name string, clientID string) *cli.Command {
@@ -25,7 +26,7 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 				Usage: "Set standard endpoints with base domain -standard-endpoints=demo.ecms.test",
 			},
 		},
-		Action: func(c *cli.Context) error {
+		Action: func(ctx context.Context, c *cli.Command) error {
 			var (
 				env       = c.String("env")
 				oidc      = c.String("oidc")
@@ -45,7 +46,7 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 			}
 
 			if oidc != "" {
-				err := handler.SetOIDCConfigURL(c.Context, oidc)
+				err := handler.SetOIDCConfigURL(ctx, oidc)
 				if err != nil {
 					return err
 				}
