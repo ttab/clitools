@@ -272,7 +272,6 @@ func (ac *ConfigurationHandler) GetAccessToken(
 	q.Set("code_challenge_method", "S256")
 	q.Set("redirect_uri", redirectURL)
 	q.Set("scope", strings.Join(scopes, " "))
-	q.Set("kc_idp_hint", "saml")
 
 	authURL.RawQuery = q.Encode()
 
