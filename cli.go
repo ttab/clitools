@@ -22,8 +22,8 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 				Usage: "-endpoint=repository=https://repository.api.demo.ecms.test",
 			},
 			&cli.StringFlag{
-				Name:  "standard-endpoints",
-				Usage: "Set standard endpoints with base domain -standard-endpoints=demo.ecms.test",
+				Name:  "base-url",
+				Usage: "Set the base URL for the environment, service endpoints are derived from it",
 			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
@@ -31,7 +31,7 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 				env       = c.String("env")
 				oidc      = c.String("oidc")
 				endpoints = c.StringSlice("endpoint")
-				standard  = c.String("standard-endpoints")
+				baseURL   = c.String("base-url")
 			)
 
 			if env == "" {
@@ -65,9 +65,11 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 
 			handler.AddEndpoints(endpointMap)
 
-			if standard != "" {
-				handler.AddEndpoints(
-					elephantEndpoints("https", standard))
+			if baseURL != "" {
+				err := handler.SetBaseURL(baseURL)
+				if err != nil {
+					return err
+				}
 			}
 
 			err = handler.Save()

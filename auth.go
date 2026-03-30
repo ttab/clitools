@@ -103,8 +103,6 @@ func (ac *ConfigurationHandler) Load() (outErr error) {
 			config.Endpoints = make(map[string]string)
 		}
 
-		config.SetDefaults(ac.env)
-
 		err = unmarshalFile(ac.tokenFile, &tokens)
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("load access tokens: %w", err)
@@ -166,21 +164,46 @@ func (ac *ConfigurationHandler) SetOIDCConfigURL(
 	return nil
 }
 
+// SetBaseURL sets the base URL for the environment. Service endpoints will be
+// derived from this URL when not explicitly configured.
+func (ac *ConfigurationHandler) SetBaseURL(baseURL string) error {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("parse base URL: %w", err)
+	}
+
+	if u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("base URL must include scheme and host")
+	}
+
+	ac.config.BaseURL = baseURL
+
+	return nil
+}
+
 // AddEndpoints for the environment.
 func (ac *ConfigurationHandler) AddEndpoints(endpoints map[string]string) {
 	maps.Copy(ac.config.Endpoints, endpoints)
 }
 
-// GetEndpoints returns all available endpoints.
+// GetEndpoints returns all available endpoints. Endpoints derived from the base
+// URL are included, but explicit endpoints take precedence.
 func (ac *ConfigurationHandler) GetEndpoints() map[string]string {
-	return maps.Clone(ac.config.Endpoints)
+	result := ac.config.BaseURLEndpoints()
+	maps.Copy(result, ac.config.Endpoints)
+
+	return result
 }
 
-// GetEndpoints returns the specified endpoint.
+// GetEndpoint returns the specified endpoint. Explicit endpoints take
+// precedence over endpoints derived from the base URL.
 func (ac *ConfigurationHandler) GetEndpoint(name string) (string, bool) {
 	v, ok := ac.config.Endpoints[name]
+	if ok {
+		return v, true
+	}
 
-	return v, ok
+	return ac.config.EndpointFromBaseURL(name)
 }
 
 // Convenience function for using the OIDC configuration to get a client

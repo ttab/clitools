@@ -5,34 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 )
 
 type EnvConfiguration struct {
 	OIDC      *OIDCEnvironment `json:"oidc"`
+	BaseURL   string           `json:"base_url,omitempty"`
 	Endpoints map[string]string
-}
-
-func (ec *EnvConfiguration) SetDefaults(env string) {
-	defaults, ok := known[env]
-	if !ok {
-		return
-	}
-
-	for name, endpoint := range defaults.Endpoints {
-		_, isSet := ec.Endpoints[name]
-		if isSet {
-			continue
-		}
-
-		ec.Endpoints[name] = endpoint
-	}
-
-	if ec.OIDC == nil {
-		ec.OIDC = &OIDCEnvironment{
-			ConfigURL: defaults.OIDCConfig,
-		}
-	}
 }
 
 type OIDCEnvironment struct {
@@ -90,35 +70,6 @@ type OIDCConfig struct {
 	EndSessionEndpoint    string `json:"end_session_endpoint"`
 }
 
-type knownEnv struct {
-	OIDCConfig string
-	Endpoints  map[string]string
-}
-
-var known = map[string]knownEnv{
-	"local-demo": {
-		OIDCConfig: "http://elsinod.demo.ecms.test/.well-known/openid-configuration",
-		Endpoints:  elephantEndpoints("https", "demo.ecms.test"),
-	},
-	"prod": {
-		OIDCConfig: "https://login.tt.se/realms/elephant/.well-known/openid-configuration",
-		Endpoints:  elephantEndpoints("https", "tt.ecms.se"),
-	},
-	"stage": {
-		OIDCConfig: "https://login.stage.tt.se/realms/elephant/.well-known/openid-configuration",
-		Endpoints: map[string]string{
-			// Not a fully standardised environment.
-			"chrome":     "https://stage.tt.se/elephant",
-			"repository": "https://repository.stage.tt.se",
-			"index":      "https://elephant-index.stage.tt.se",
-			"spell":      "https://spell.api.stage.tt.se",
-			"user":       "https://user.api.stage.tt.se",
-			"baboon":     "https://baboon.api.stage.tt.se",
-			"wires":      "https://wires.api.stage.tt.se",
-		},
-	},
-}
-
 func elephantEndpoints(proto string, base string) map[string]string {
 	return map[string]string{
 		"chrome":     fmt.Sprintf("%s://%s/elephant", proto, base),
@@ -131,6 +82,41 @@ func elephantEndpoints(proto string, base string) map[string]string {
 	}
 }
 
+// ElephantAPIEndpoint constructs a standard API endpoint URL.
 func ElephantAPIEndpoint(proto, base, name string) string {
 	return fmt.Sprintf("%s://%s.api.%s", proto, name, base)
+}
+
+// EndpointFromBaseURL constructs an endpoint URL from the configured base URL.
+// Explicit endpoints take precedence and should be checked first.
+func (ec *EnvConfiguration) EndpointFromBaseURL(name string) (string, bool) {
+	if ec.BaseURL == "" {
+		return "", false
+	}
+
+	u, err := url.Parse(ec.BaseURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", false
+	}
+
+	if name == "chrome" {
+		return ec.BaseURL + "/elephant", true
+	}
+
+	return ElephantAPIEndpoint(u.Scheme, u.Host, name), true
+}
+
+// BaseURLEndpoints returns the standard set of elephant endpoints derived from
+// the base URL. Returns an empty map if no base URL is configured.
+func (ec *EnvConfiguration) BaseURLEndpoints() map[string]string {
+	if ec.BaseURL == "" {
+		return make(map[string]string)
+	}
+
+	u, err := url.Parse(ec.BaseURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return make(map[string]string)
+	}
+
+	return elephantEndpoints(u.Scheme, u.Host)
 }
