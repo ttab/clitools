@@ -10,10 +10,11 @@ import (
 	"github.com/ttab/clitools"
 )
 
+// Example demonstrates authenticating against an Elephant environment and
+// looking up service endpoints. The environment must have been configured
+// beforehand using the "configure" CLI command.
 func Example() {
-	env := "stage"
-
-	println("Sample application that demonstrates logging in to elephant from a CLI tool\n")
+	env := "tt-prod"
 
 	app, err := clitools.NewConfigurationHandler(
 		"clitools", clitools.DefaultApplicationID, env,
@@ -22,6 +23,18 @@ func Example() {
 		panic(fmt.Errorf("create configuration handler: %w", err))
 	}
 
+	// Look up a service endpoint. If a base URL has been configured this
+	// will derive the endpoint automatically.
+	repoURL, ok := app.GetEndpoint("repository")
+	if !ok {
+		panic("no repository endpoint configured")
+	}
+
+	fmt.Println("Repository endpoint:", repoURL)
+
+	// Authenticate using the OIDC authorization code flow. This will open
+	// a browser window for the user to log in, unless a valid cached token
+	// is available.
 	token, err := app.GetAccessToken(context.Background(), []string{
 		"doc_read",
 	})
@@ -38,7 +51,7 @@ func Example() {
 
 	enc.SetIndent("", "  ")
 
-	println("Current token:")
+	fmt.Println("Current token:")
 	_ = enc.Encode(token)
 }
 
