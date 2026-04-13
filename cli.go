@@ -15,7 +15,7 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "oidc",
-				Usage: "Set the .well-known/openid-configuration URL",
+				Usage: "Set the OIDC discovery URL or issuer URL (the .well-known/openid-configuration path is added automatically if missing)",
 			},
 			&cli.StringSliceFlag{
 				Name:  "endpoint",

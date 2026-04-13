@@ -150,6 +150,8 @@ func (ac *ConfigurationHandler) SetOIDCConfigURL(
 	ctx context.Context,
 	configURL string,
 ) error {
+	configURL = ensureWellKnownSuffix(configURL)
+
 	env := &OIDCEnvironment{
 		ConfigURL: configURL,
 	}
@@ -162,6 +164,25 @@ func (ac *ConfigurationHandler) SetOIDCConfigURL(
 	ac.config.OIDC = env
 
 	return nil
+}
+
+const oidcWellKnownPath = "/.well-known/openid-configuration"
+
+// ensureWellKnownSuffix appends the OIDC discovery path to the URL if it
+// doesn't already end with it.
+func ensureWellKnownSuffix(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	if strings.HasSuffix(u.Path, oidcWellKnownPath) {
+		return rawURL
+	}
+
+	u.Path = strings.TrimRight(u.Path, "/") + oidcWellKnownPath
+
+	return u.String()
 }
 
 // SetBaseURL sets the base URL for the environment. Service endpoints will be

@@ -10,7 +10,7 @@ Before a CLI tool can authenticate or call services, the target environment need
 
 ```bash
 # Set the base URL for the environment. Service endpoints are derived from it.
-myapp --env=prod configure --base-url=https://tt.ecms.se --oidc=https://login.tt.se/realms/elephant/.well-known/openid-configuration
+myapp --env=prod configure --base-url=https://tt.ecms.se --oidc=https://login.tt.se/realms/elephant
 
 # Individual endpoints can be overridden when a service doesn't follow the
 # standard naming convention.
