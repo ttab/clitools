@@ -319,8 +319,8 @@ func (ac *ConfigurationHandler) GetAccessToken(
 
 	authURL.RawQuery = q.Encode()
 
-	fmt.Println("Requesting a new access token")
-	fmt.Printf("If a web browser doesn't automatically open, go to the following URL to log in:\n\t%s\n\n", authURL.String())
+	fmt.Fprintln(os.Stderr, "Requesting a new access token")
+	fmt.Fprintf(os.Stderr, "If a web browser doesn't automatically open, go to the following URL to log in:\n\t%s\n\n", authURL.String())
 
 	_ = browser.OpenURL(authURL.String())
 
