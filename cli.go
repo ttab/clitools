@@ -25,13 +25,18 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 				Name:  "base-url",
 				Usage: "Set the base URL for the environment, service endpoints are derived from it",
 			},
+			&cli.BoolFlag{
+				Name:  "reset-endpoints",
+				Usage: "Reset any explicitly configured endpoints",
+			},
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			var (
-				env       = c.String("env")
-				oidc      = c.String("oidc")
-				endpoints = c.StringSlice("endpoint")
-				baseURL   = c.String("base-url")
+				env            = c.String("env")
+				oidc           = c.String("oidc")
+				endpoints      = c.StringSlice("endpoint")
+				baseURL        = c.String("base-url")
+				resetEndpoints = c.Bool("reset-endpoints")
 			)
 
 			if env == "" {
@@ -50,6 +55,10 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 				if err != nil {
 					return err
 				}
+			}
+
+			if resetEndpoints {
+				handler.ResetEndpoints()
 			}
 
 			endpointMap := map[string]string{}

@@ -207,6 +207,12 @@ func (ac *ConfigurationHandler) AddEndpoints(endpoints map[string]string) {
 	maps.Copy(ac.config.Endpoints, endpoints)
 }
 
+// ResetEndpoints clears any explicitly configured endpoints for the
+// environment.
+func (ac *ConfigurationHandler) ResetEndpoints() {
+	ac.config.Endpoints = make(map[string]string)
+}
+
 // GetEndpoints returns all available endpoints. Endpoints derived from the base
 // URL are included, but explicit endpoints take precedence.
 func (ac *ConfigurationHandler) GetEndpoints() map[string]string {
