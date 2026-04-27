@@ -14,6 +14,11 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 		Name: "configure",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
+				Name:     "env",
+				Usage:    "The name of the environment to configure",
+				Required: true,
+			},
+			&cli.StringFlag{
 				Name:  "oidc",
 				Usage: "Set the OIDC discovery URL or issuer URL (the .well-known/openid-configuration path is added automatically if missing)",
 			},
