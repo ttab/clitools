@@ -30,6 +30,37 @@ The "chrome" endpoint is special-cased to `{base URL}/elephant`. All other endpo
 
 Explicit endpoints (set with `--endpoint`) always take precedence over endpoints derived from the base URL.
 
+### Well-known environments
+
+`configure --well-known` sets up the TT and NTB environments in one go:
+
+| Environment | Base URL                    | OIDC realm                                 |
+|-------------|-----------------------------|--------------------------------------------|
+| `tt-stage`  | `https://stage.tt.ecms.se`  | `https://login.stage.tt.se/realms/elephant` |
+| `tt-prod`   | `https://tt.ecms.se`        | `https://login.tt.se/realms/elephant`       |
+| `ntb-stage` | `https://stage.ntb.ecms.se` | `https://login.stage.tt.se/realms/ntb`      |
+| `ntb-prod`  | `https://ntb.ecms.se`       | `https://login.tt.se/realms/ntb`            |
+
+It also makes `stage` and `prod` aliases for `tt-stage` and `tt-prod`, unless an environment with that name is already configured, in which case it is left alone. Running it again refreshes the OIDC realm and base URL of the four environments and leaves any explicit endpoints in place.
+
+```bash
+myapp configure --well-known
+```
+
+Running `configure` with no flags at all in a terminal asks whether to do the same, so a first-time user doesn't have to know the flag. Without a terminal it fails asking for `--env`, as before.
+
+### Aliases
+
+An alias is an environment that refers to another one by name. It holds no configuration or tokens of its own: everything is read from and written to the target, so `--env stage` and `--env tt-stage` share one login.
+
+```bash
+myapp configure --env=stage --alias=tt-stage
+```
+
+Configuring an alias with `--oidc`, `--base-url` or `--endpoint` changes its target. Setting `--alias` on an environment that has configuration of its own replaces it. Aliases are a single hop: the target must be a configured environment that is not itself an alias, and an environment that is the target of an alias cannot become one.
+
+`configure list` shows every environment, with aliases listed as such.
+
 ## Endpoint resolution
 
 Application code retrieves endpoints through the `ConfigurationHandler`:
@@ -61,7 +92,7 @@ See the [example in the Go docs](https://pkg.go.dev/github.com/ttab/clitools#exa
 Configuration is stored per environment under `$XDG_CONFIG_HOME/elephant-clitools/{environment}/` (or the platform-appropriate [user configuration directory](https://pkg.go.dev/os#UserConfigDir), e.g. `~/.config/elephant-clitools/{environment}/` on Linux).
 
 Each environment directory contains:
-- `config.json` -- OIDC settings, base URL, and endpoint overrides. Shared across all applications using the same environment.
+- `config.json` -- OIDC settings, base URL, and endpoint overrides. Shared across all applications using the same environment. For an alias it holds only the name of the target, `{"alias": "tt-stage"}`.
 - `tokens.json` -- cached access tokens, keyed by application name.
 
 File system locking ensures that concurrent CLI processes don't corrupt the configuration.

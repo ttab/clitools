@@ -38,17 +38,25 @@ type AccessToken struct {
 
 // NewConfigurationHandler crates a configuration handler and loads the current
 // configuration from disk if it's available.
+//
+// If the environment is an alias the handler operates on the environment it
+// refers to, see SetEnvironmentAlias.
 func NewConfigurationHandler(
 	name string,
 	clientID string,
 	environment string,
 ) (*ConfigurationHandler, error) {
-	ucDir, err := UserConfigDir()
+	baseDir, err := environmentsDir()
 	if err != nil {
-		return nil, fmt.Errorf("get user configuration directory: %w", err)
+		return nil, err
 	}
 
-	configDir := filepath.Join(ucDir, "elephant-clitools", environment)
+	resolved, err := resolveEnvironment(baseDir, environment)
+	if err != nil {
+		return nil, err
+	}
+
+	configDir := filepath.Join(baseDir, resolved)
 
 	err = os.MkdirAll(configDir, 0o700)
 	if err != nil {
@@ -56,7 +64,8 @@ func NewConfigurationHandler(
 	}
 
 	ac := ConfigurationHandler{
-		env:             environment,
+		env:             resolved,
+		requestedEnv:    environment,
 		name:            name,
 		clientID:        clientID,
 		configDirectory: configDir,
@@ -76,6 +85,7 @@ func NewConfigurationHandler(
 
 type ConfigurationHandler struct {
 	env             string
+	requestedEnv    string
 	name            string
 	clientID        string
 	configDirectory string
@@ -84,6 +94,29 @@ type ConfigurationHandler struct {
 	tokenFile       string
 	config          EnvConfiguration
 	tokens          map[string]AccessToken
+}
+
+// Environment returns the name of the environment the handler operates on.
+// This differs from the requested environment when that was an alias.
+func (ac *ConfigurationHandler) Environment() string {
+	return ac.env
+}
+
+// IsConfigured reports whether the environment has an OIDC configuration,
+// which is what's needed to get access tokens.
+func (ac *ConfigurationHandler) IsConfigured() bool {
+	return ac.config.OIDC != nil
+}
+
+func (ac *ConfigurationHandler) notConfiguredError() error {
+	env := ac.requestedEnv
+	if ac.env != ac.requestedEnv {
+		env = fmt.Sprintf("%s (alias for %s)", ac.requestedEnv, ac.env)
+	}
+
+	return fmt.Errorf(
+		"environment %s has no OIDC configuration: run the configure command with --well-known, or with --env %s --oidc and --base-url",
+		env, ac.env)
 }
 
 // Load configuration and tokens from disk.
@@ -240,6 +273,10 @@ func (ac *ConfigurationHandler) GetClientAccessToken(
 	clientID string, clientSecret string,
 	scopes []string,
 ) (oauth2.TokenSource, error) {
+	if ac.config.OIDC == nil {
+		return nil, ac.notConfiguredError()
+	}
+
 	err := ac.config.OIDC.EnsureOIDCConfig(ctx, http.DefaultClient, 24*time.Hour)
 	if err != nil {
 		return nil, fmt.Errorf("ensure OIDC config: %w", err)
@@ -441,6 +478,9 @@ func (ac *ConfigurationHandler) GetOIDCConfig(
 	ctx context.Context,
 ) (*OIDCConfig, error) {
 	ce := ac.config.OIDC
+	if ce == nil {
+		return nil, ac.notConfiguredError()
+	}
 
 	err := ce.EnsureOIDCConfig(ctx, http.DefaultClient, 12*time.Hour)
 	if err != nil {

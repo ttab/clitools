@@ -10,9 +10,21 @@ import (
 )
 
 type EnvConfiguration struct {
-	OIDC      *OIDCEnvironment `json:"oidc"`
-	BaseURL   string           `json:"base_url,omitempty"`
-	Endpoints map[string]string
+	// Alias makes the environment a reference to another environment.
+	// An alias holds no configuration or tokens of its own: everything
+	// is read from, and written to, the environment it names.
+	Alias     string            `json:"alias,omitempty"`
+	OIDC      *OIDCEnvironment  `json:"oidc,omitempty"`
+	BaseURL   string            `json:"base_url,omitempty"`
+	Endpoints map[string]string `json:",omitempty"`
+}
+
+// configured reports whether the environment has been given any
+// configuration at all. A directory left behind by a tool that looked up an
+// environment that didn't exist yet is not configured.
+func (ec EnvConfiguration) configured() bool {
+	return ec.Alias != "" || ec.OIDC != nil || ec.BaseURL != "" ||
+		len(ec.Endpoints) > 0
 }
 
 type OIDCEnvironment struct {
