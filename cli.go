@@ -57,7 +57,7 @@ func ConfigureCliCommands(name string, clientID string) *cli.Command {
 		},
 		Action: func(ctx context.Context, c *cli.Command) error {
 			var (
-				env            = c.String("env")
+				env            = lineageEnv(c)
 				oidc           = c.String("oidc")
 				endpoints      = c.StringSlice("endpoint")
 				baseURL        = c.String("base-url")
@@ -262,6 +262,21 @@ func writeEnvironmentSummary(
 		fmt.Fprintf(b, "  Token:    %s\n",
 			token.Expires.Local().Format(time.RFC3339))
 	}
+}
+
+// lineageEnv returns the value of the first --env flag in the command's
+// lineage that was actually set, so that "app --env prod configure" works
+// even though configure has an --env flag of its own. A parent flag's default
+// doesn't count, otherwise a bare configure would never offer the well-known
+// environments.
+func lineageEnv(c *cli.Command) string {
+	for _, cmd := range c.Lineage() {
+		if cmd.IsSet("env") {
+			return cmd.String("env")
+		}
+	}
+
+	return ""
 }
 
 // askYesNo asks a yes or no question, returning def for an empty answer.

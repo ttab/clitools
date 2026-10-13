@@ -3,6 +3,13 @@
 All notable changes after v1.0.0 are documented here. Entries are derived from
 the release tags; the linked commits and PRs hold the detail.
 
+## [v1.1.1] - 2026-10-13
+
+- `configure` takes the environment from an `--env` set on a parent command
+  again, so `app --env prod configure …` works as it did before v1.1.0, where
+  it failed asking for `--env`. An `--env` on `configure` itself still wins,
+  and a parent flag's default doesn't count.
+
 ## [v1.1.0] - 2026-10-13
 
 **Behaviour change (environment names):** `NewConfigurationHandler` now
